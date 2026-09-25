@@ -13,7 +13,7 @@ const server = new McpServer(
 const asText = (value, summary) => ({ structuredContent: value, content: [{ type: "text", text: summary || JSON.stringify(value, null, 2) }] });
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).describe("Issue month in YYYY-MM format");
 const here = path.dirname(fileURLToPath(import.meta.url));
-const STUDIO_URI = "ui://volta-newsletter/studio-v7.html";
+const STUDIO_URI = "ui://volta-newsletter/studio-v8.html";
 const engagementCtaSchema = z.object({
   enabled: z.boolean().default(true),
   type: z.enum(["general", "reply", "event", "program", "survey", "custom"]).default("reply"),
