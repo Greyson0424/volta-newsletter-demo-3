@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "volta_newsletter": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["plugins/volta-newsletter/server/index.js"],
+      "env": {}
+    }
+  }
+}
+

@@ -1,0 +1,20 @@
+{
+  "name": "volta-newsletter-repo",
+  "interface": {
+    "displayName": "VOLTA Newsletter Repository"
+  },
+  "plugins": [
+    {
+      "name": "volta-newsletter",
+      "source": {
+        "source": "local",
+        "path": "./plugins/volta-newsletter"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

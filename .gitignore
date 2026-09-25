@@ -1,0 +1,17 @@
+# Installed dependencies
+plugins/volta-newsletter/node_modules/
+
+# Generated newsletter drafts
+outputs/*
+!outputs/.gitkeep
+
+# Private intake and local secrets
+newsletter-data/inbox.json
+.env
+plugins/volta-newsletter/.env
+
+# Local noise
+.DS_Store
+Thumbs.db
+*.log
+dist/

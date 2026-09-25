@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "volta-newsletter",
+  "version": "0.2.0+codex.20260925033901",
+  "description": "Draft sourced, editable, VOLTA-branded monthly newsletters with calendar links, engagement CTAs, and optional unsent Mailchimp campaigns.",
+  "author": {
+    "name": "VOLTA Halifax",
+    "url": "https://voltaeffect.com"
+  },
+  "homepage": "https://voltaeffect.com",
+  "keywords": ["newsletter", "mailchimp", "events", "community", "volta"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "VOLTA Newsletter",
+        "shortDescription": "Draft VOLTA's monthly newsletter for review.",
+        "longDescription": "Collect VOLTA events and community stories, retain source links, render an editable branded email with calendar and engagement actions, and create an unsent Mailchimp draft after approval.",
+        "developerName": "VOLTA Halifax",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://voltaeffect.com",
+        "defaultPrompt": [
+          "Draft this month's VOLTA newsletter, then open the interactive Newsletter Studio.",
+          "Create next month's newsletter draft, show every source, and open Newsletter Studio for editing."
+        ],
+        "brandColor": "#05D9E7"
+      }
+    }
+  }
+}

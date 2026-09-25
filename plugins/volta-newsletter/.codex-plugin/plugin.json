@@ -1,0 +1,24 @@
+{
+  "name": "volta-newsletter",
+  "version": "0.2.0+codex.20260925033901",
+  "description": "Draft sourced, editable, VOLTA-branded monthly newsletters and optionally create unsent Mailchimp campaigns.",
+  "author": {
+    "name": "VOLTA Halifax"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Volta Newsletter",
+    "shortDescription": "Draft VOLTA's monthly newsletter for review.",
+    "longDescription": "Collect VOLTA events and community stories, retain sources, render branded email HTML, and create an unsent Mailchimp draft after approval.",
+    "developerName": "VOLTA Halifax",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://voltaeffect.com",
+    "brandColor": "#05D9E7",
+    "defaultPrompt": "Draft this month's VOLTA newsletter, then call open_newsletter_studio so I can edit it interactively."
+  },
+  "mcpServers": "./.mcp.json"
+}

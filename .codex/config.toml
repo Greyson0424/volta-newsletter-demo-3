@@ -1,0 +1,52 @@
+[plugins."volta-newsletter@volta-newsletter-repo"]
+enabled = true
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter]
+enabled = true
+default_tools_approval_mode = "prompt"
+enabled_tools = ["add_newsletter_item", "list_newsletter_items", "update_newsletter_item", "open_newsletter_studio", "save_newsletter_draft", "export_newsletter_package", "create_mailchimp_draft_from_studio", "read_newsletter_memory", "record_newsletter_issue", "collect_volta_events", "collect_volta_stories", "collect_linkedin_mentions", "read_linkedin_queue", "render_newsletter_html", "create_mailchimp_draft"]
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.add_newsletter_item]
+approval_mode = "prompt"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.list_newsletter_items]
+approval_mode = "approve"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.update_newsletter_item]
+approval_mode = "prompt"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.open_newsletter_studio]
+approval_mode = "approve"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.save_newsletter_draft]
+approval_mode = "prompt"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.export_newsletter_package]
+approval_mode = "prompt"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.create_mailchimp_draft_from_studio]
+approval_mode = "prompt"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.read_newsletter_memory]
+approval_mode = "approve"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.record_newsletter_issue]
+approval_mode = "prompt"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.collect_volta_events]
+approval_mode = "approve"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.collect_volta_stories]
+approval_mode = "approve"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.collect_linkedin_mentions]
+approval_mode = "approve"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.read_linkedin_queue]
+approval_mode = "approve"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.render_newsletter_html]
+approval_mode = "prompt"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.create_mailchimp_draft]
+approval_mode = "prompt"

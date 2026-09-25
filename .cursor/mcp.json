@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "volta_newsletter": {
+      "command": "node",
+      "args": ["plugins/volta-newsletter/server/index.js"],
+      "env": {}
+    }
+  }
+}

@@ -1,0 +1,8 @@
+interface:
+  display_name: "VOLTA Newsletter"
+  short_description: "Draft and edit VOLTA's monthly newsletter"
+  brand_color: "#05D9E7"
+  default_prompt: "Use $volta-newsletter to draft this month's issue and open the editable Newsletter Studio."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "volta_newsletter": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["server/index.js"],
+      "cwd": "./",
+      "env": {}
+    }
+  }
+}

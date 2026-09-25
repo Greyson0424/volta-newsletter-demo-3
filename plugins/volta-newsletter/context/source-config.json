@@ -1,0 +1,26 @@
+{
+  "inbox": {
+    "path": "newsletter-data/inbox.json",
+    "defaultStatus": "candidate"
+  },
+  "slack": {
+    "channels": [],
+    "lookbackDays": 45,
+    "signals": [
+      "launch",
+      "launched",
+      "funding",
+      "raised",
+      "award",
+      "partnership",
+      "hired",
+      "customer",
+      "milestone",
+      "shipped"
+    ]
+  },
+  "linkedin": {
+    "organization": "VOLTA Halifax",
+    "requireUnderlyingPostReview": true
+  }
+}
