@@ -54,7 +54,7 @@ Select **Export for Mailchimp** in Newsletter Studio. Upload `outputs/<YYYY-MM>/
 
 The editable interface is **Newsletter Studio**. In Codex it renders inside the task. In Claude Code and Cursor it runs locally at `http://127.0.0.1:4173`. It has dropdowns, text inputs, date/time controls, Edit and Remove buttons, an editable Community Call to Action, a live preview, Save, and Export. Saving stores the subject, preview text, opening note, CTA, and content for that issue month. The generated `.html` file is a preview/export, not the editing surface.
 
-1. In Codex, open the **Volta-newsletter (Demo 3)** project.
+1. In Codex, open this repository as a project.
 2. Restart Codex after the first installation or after updating the plugin.
 3. Start a **new task inside that project**. Existing tasks do not hot-load newly installed plugin tools.
 4. Type `newsletter`, or select **VOLTA Newsletter** from the skill/plugin picker.
@@ -96,19 +96,9 @@ Other useful commands:
 
 The final send always remains in Mailchimp.
 
-## Share or publish this product
+## Example output
 
-This product must be shared as the complete repository/plugin—not as `SKILL.md` alone—because Newsletter Studio depends on the bundled MCP server and UI assets.
-
-To create a clean ZIP on Windows:
-
-```powershell
-.\package.ps1
-```
-
-The ZIP is written to `dist/volta-newsletter-plugin.zip` without dependencies, private inbox notes, generated drafts, or secrets. A recipient can unzip it, run the setup script, open the folder as a trusted Codex project, restart Codex, and start a new task with `newsletter`.
-
-For GitHub, commit the contents of this complete **Volta-newsletter (Demo 3)** project folder as-is. The included `.gitignore` excludes installed dependencies, secrets, private intake, generated drafts, and distribution ZIPs. Do not copy only `SKILL.md`: the editor also needs the MCP server, assets, context, manifests, and root setup files. See `DISTRIBUTING.md` for the recipient checklist.
+`examples/volta-newsletter-september-2026.pdf` is a rendered issue made from the public sources listed in `examples/SOURCES.md`. It is included as a reference and is not loaded into new drafts.
 
 ## Why the repository is structured this way
 
