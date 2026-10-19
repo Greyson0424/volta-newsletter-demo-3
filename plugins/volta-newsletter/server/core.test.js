@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import JSZip from "jszip";
-import { addNewsletterItem, collectLinkedInMentions, exportNewsletterPackage, extractEventbriteImageCandidates, getMailchimpSetupStatus, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, updateNewsletterItem } from "./core.js";
+import { addNewsletterItem, collectLinkedInMentions, exportNewsletterPackage, extractEventbriteImageCandidates, extractMonthlyEventsFromHtml, getMailchimpSetupStatus, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, syncNewsletterEvents, updateNewsletterItem } from "./core.js";
 
 test("renders branded HTML and contact footer", async () => {
   const target = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "volta-newsletter-")), "issue.html");
@@ -127,6 +127,36 @@ test("Mailchimp setup status reports names without exposing values", () => {
 test("extracts the preferred public Eventbrite image from structured metadata", () => {
   const html = '<html><head><meta property="og:image" content="https://example.com/fallback.jpg"><script type="application/ld+json">{"@type":"Event","image":["https://img.evbuc.com/preferred.jpg"]}</script></head></html>';
   assert.deepEqual(extractEventbriteImageCandidates(html), ["https://img.evbuc.com/preferred.jpg", "https://example.com/fallback.jpg"]);
+});
+
+test("extracts only same-month Volta-location Eventbrite fallback events", () => {
+  const html = `<script type="application/ld+json">{"@type":"ItemList","itemListElement":[
+    {"item":{"@type":"Event","name":"Builder Night","description":"Build and connect.","startDate":"2026-10-22","image":"https://img.evbuc.com/builder.jpg","url":"https://www.eventbrite.ca/e/builder-night-1","location":{"name":"Volta"}}},
+    {"item":{"@type":"Event","name":"Other Venue","startDate":"2026-10-23","url":"https://www.eventbrite.ca/e/other-2","location":{"name":"Elsewhere"}}},
+    {"item":{"@type":"Event","name":"Next Month","startDate":"2026-11-01","url":"https://www.eventbrite.ca/e/next-3","location":{"name":"Volta"}}}
+  ]}</script>`;
+  const events = extractMonthlyEventsFromHtml(html, { month: "2026-10", sourcePage: "https://www.eventbrite.ca/d/canada--halifax/volta/", verification: "public-eventbrite", requireVoltaLocation: true });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].title, "Builder Night");
+  assert.equal(events[0].summary, "Build and connect.");
+  assert.equal(events[0].imageSource, "eventbrite");
+});
+
+test("monthly event sync adds new events without overwriting edits", async () => {
+  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "volta-sync-"));
+  await addNewsletterItem({ workspacePath, month: "2026-10", type: "event", title: "Vibe Coding Meetup", summary: "My edited description.", source: "manual", sourceUrl: "https://www.eventbrite.ca/e/vibe-coding-1?aff=test", date: "2026-10-19" });
+  const result = await syncNewsletterEvents({ workspacePath, month: "2026-10", collectedEvents: [
+    { title: "Vibe Coding Meetup", summary: "Automatic description.", startDate: "2026-10-19T21:00:00Z", url: "https://www.eventbrite.ca/e/vibe-coding-1", location: "Volta", verification: "first-party" },
+    { title: "AI Mixer", summary: "Meet builders using AI.", startDate: "2026-10-28T21:00:00Z", endDate: "2026-10-28T23:00:00Z", url: "https://www.eventbrite.ca/e/ai-mixer-2", location: "Volta", verification: "public-eventbrite", imageUrl: "https://img.evbuc.com/ai.jpg", imageSource: "eventbrite" },
+  ] });
+  assert.equal(result.addedCount, 1);
+  assert.equal(result.preservedCount, 1);
+  const listed = await listNewsletterItems({ workspacePath, month: "2026-10" });
+  assert.equal(listed.items.find((item) => item.title === "Vibe Coding Meetup").summary, "My edited description.");
+  const mixer = listed.items.find((item) => item.title === "AI Mixer");
+  assert.equal(mixer.summary, "Meet builders using AI.");
+  assert.equal(mixer.time, "18:00");
+  assert.equal(mixer.source, "eventbrite");
 });
 
 test("exports a complete provider-independent handoff package", async () => {

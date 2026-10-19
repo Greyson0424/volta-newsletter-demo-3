@@ -58,7 +58,7 @@ The editable interface is **Newsletter Studio**. In Codex it renders inside the 
 2. Restart Codex after the first installation or after updating the plugin.
 3. Start a **new task inside that project**. Existing tasks do not hot-load newly installed plugin tools.
 4. Type `newsletter`, or select **VOLTA Newsletter** from the skill/plugin picker.
-5. After research and drafting, Codex opens **Newsletter Studio** in the task. Use Editor, Split, or Preview mode and the larger fields to edit the greeting, subject, preview text, opening, unlimited community updates, upcoming events, past-event recaps, dates, links, locations, photos, and one focused Community Call to Action. Each item and photo can be edited or removed.
+5. After automatically syncing the month from VOLTA Events and public Eventbrite fallback listings, Codex opens **Newsletter Studio** in the task. Split mode keeps the editor and VOLTA-styled preview side by side. Use the larger fields to edit the greeting, subject, preview text, opening, unlimited community updates, upcoming events, past-event recaps, dates, links, locations, automatic descriptions, photos, and one focused Community Call to Action. Each item and photo can be edited or removed.
 6. Select **Save draft** to refresh the Markdown and branded HTML, or **Export for Mailchimp** for the handoff files.
 
 If Codex opens only an HTML or Markdown file, close that task, restart Codex, and begin a new task under this project. That means the task began before the plugin tools were loaded.
@@ -83,7 +83,7 @@ Then open the repository as a trusted Codex project, start a new task, and type:
 newsletter
 ```
 
-Codex gathers the source material and then opens the embedded **Newsletter Studio**. In that panel you can choose Upcoming event, Community update, or Past event recap; enter the title, description, link, date, time, and location; and edit or remove existing cards. Community updates appear above events and have no item limit. Eventbrite links can supply a suggested photo automatically, while any photo can be uploaded, replaced by URL, or removed.
+Codex gathers the source material, automatically merges monthly events from VOLTA's calendar and public Eventbrite fallback listings, and then opens the embedded **Newsletter Studio**. Refreshing events does not overwrite edited or excluded cards. In the side-by-side editor and preview you can choose Upcoming event, Community update, or Past event recap; change the automatically sourced title, description, link, date, time, location, and image; or remove a card. Community updates appear above events and have no item limit.
 
 Select **Export for Mailchimp** for a provider-independent handoff. It creates editable Markdown, branded HTML, a Mailchimp ZIP with selected images, plain text, section-by-section Mailchimp copy, a structured JSON manifest, and one .ics file for each dated event. Newsletter event cards include one-click Google Calendar and Outlook Calendar links. The Community Call to Action can invite a reply, event registration, program application, survey response, or custom action; eligible web destinations receive monthly UTM tracking automatically. Direct Mailchimp API integration remains optional and hidden from the default editor.
 

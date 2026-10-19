@@ -12,6 +12,7 @@ When the user types `add community win:`, `add event:`, or `add past event:`, us
 
 - Default to the current calendar month in `America/Halifax` unless the user names another month.
 - Gather current source material before drafting. Keep the source URL and publication/event date for every factual item.
+- Run `sync_newsletter_events` before every monthly draft so VOLTA's first-party calendar is supplemented by same-month public Eventbrite listings located at Volta. Preserve all existing edits and exclusions.
 - Read `newsletter-data/inbox.json` through the MCP inbox tools. Preserve excluded items for provenance instead of deleting them.
 - Read `memory.md` through `read_newsletter_memory` before drafting. Record each completed draft with `record_newsletter_issue`; do not reuse stories from sent issues unless there is a materially new development approved by the user.
 - If the Slack plugin is connected, search Slack for leads and retain permalinks. Otherwise continue with the other sources and report that Slack discovery was skipped.

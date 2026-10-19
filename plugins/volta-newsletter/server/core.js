@@ -10,7 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..");
 
 const ITEM_TYPES = new Set(["community_win", "event", "past_event"]);
-const ITEM_SOURCES = new Set(["manual", "slack", "linkedin", "one_to_one", "volta_website"]);
+const ITEM_SOURCES = new Set(["manual", "slack", "linkedin", "one_to_one", "volta_website", "eventbrite"]);
 const ITEM_STATUSES = new Set(["candidate", "approved", "excluded"]);
 const IMAGE_SOURCES = new Set(["eventbrite", "upload", "manual_url"]);
 const IMAGE_DATA_PATTERN = /^data:image\/(png|jpe?g|gif|webp);base64,/i;
@@ -282,6 +282,83 @@ function findTyped(value, type, found = []) {
   return found;
 }
 
+function plainText(value, fallback = "") {
+  const text = cheerio.load(`<div>${String(value || "")}</div>`)("div").text().replace(/\s+/g, " ").trim();
+  return (text || fallback).slice(0, 900);
+}
+
+function eventImage(value) {
+  const image = Array.isArray(value) ? value[0] : value;
+  const candidate = typeof image === "string" ? image : image?.url;
+  try { return normalizeImageUrl(candidate); } catch { return null; }
+}
+
+function structuredEventsFromHtml(html, { bounds, sourcePage, verification, requireVoltaLocation = false }) {
+  const $ = cheerio.load(String(html || ""));
+  const events = [];
+  $('script[type="application/ld+json"]').each((_, element) => {
+    try {
+      const data = JSON.parse($(element).text());
+      for (const event of findTyped(data, "Event")) {
+        if (!isInside(event.startDate, bounds)) continue;
+        const location = typeof event.location === "string" ? event.location : event.location?.name || event.location?.address?.streetAddress || "VOLTA";
+        if (requireVoltaLocation && !/\bvolta\b/i.test(String(location))) continue;
+        const imageUrl = eventImage(event.image);
+        const url = typeof event.url === "string" ? event.url : sourcePage;
+        events.push({
+          title: plainText(event.name, "Untitled event"),
+          startDate: event.startDate,
+          endDate: event.endDate || null,
+          location: plainText(location, "VOLTA"),
+          summary: plainText(event.description, `Join the VOLTA community for ${plainText(event.name, "this event")}.`),
+          url,
+          imageUrl,
+          imageAlt: imageUrl ? `${plainText(event.name, "VOLTA event")} event image` : null,
+          imageSource: imageUrl && /(^|\.)((eventbrite\.[a-z.]+)|(evbuc\.com))$/i.test(new URL(imageUrl).hostname) ? "eventbrite" : imageUrl ? "manual_url" : null,
+          source: sourcePage,
+          verification,
+        });
+      }
+    } catch {
+      // Ignore malformed structured data and continue with the other blocks.
+    }
+  });
+  return events;
+}
+
+export function extractMonthlyEventsFromHtml(html, { month, sourcePage, verification = "source-supplied", requireVoltaLocation = false }) {
+  return structuredEventsFromHtml(html, { bounds: monthBounds(month), sourcePage, verification, requireVoltaLocation });
+}
+
+function canonicalUrl(value) {
+  try {
+    const url = new URL(value);
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(aff|utm_|ref)/i.test(key)) url.searchParams.delete(key);
+    }
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return String(value || "").trim();
+  }
+}
+
+function eventLocalParts(startDate, endDate) {
+  const parts = (value) => {
+    if (!value) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return { date: value, time: null };
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.valueOf())) return null;
+    const formatted = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Halifax", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(parsed).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+    return { date: `${formatted.year}-${formatted.month}-${formatted.day}`, time: `${formatted.hour}:${formatted.minute}` };
+  };
+  const start = parts(startDate) || { date: null, time: null };
+  const end = parts(endDate);
+  return { date: start.date, time: start.time, endTime: end?.date === start.date ? end.time : null };
+}
+
 async function fetchText(url) {
   const response = await fetch(url, { headers: { "user-agent": "VOLTA-Newsletter/0.1 (+https://voltaeffect.com)" } });
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
@@ -290,34 +367,55 @@ async function fetchText(url) {
 
 export async function collectVoltaEvents(month) {
   const bounds = monthBounds(month);
-  const url = "https://voltaeffect.com/events";
-  const html = await fetchText(url);
-  const $ = cheerio.load(html);
+  const voltaUrl = "https://voltaeffect.com/events";
+  const eventbriteUrl = "https://www.eventbrite.ca/d/canada--halifax/volta/";
+  const [voltaResult, eventbriteResult] = await Promise.allSettled([fetchText(voltaUrl), fetchText(eventbriteUrl)]);
+  const warnings = [];
   const events = [];
-  $('script[type="application/ld+json"]').each((_, element) => {
-    try {
-      const data = JSON.parse($(element).text());
-      for (const event of findTyped(data, "Event")) {
-        if (!isInside(event.startDate, bounds)) continue;
-        const location = typeof event.location === "string" ? event.location : event.location?.name || event.location?.address?.streetAddress || "VOLTA";
-        events.push({
-          title: event.name || "Untitled event",
-          startDate: event.startDate,
-          endDate: event.endDate || null,
-          location,
-          summary: event.description || "",
-          url: typeof event.url === "string" ? event.url : url,
-          source: url,
-          verification: "first-party",
-        });
-      }
-    } catch {
-      // Ignore malformed structured data and continue with the other blocks.
-    }
-  });
-  const unique = [...new Map(events.map((item) => [`${item.title}|${item.startDate}`, item])).values()]
+  if (voltaResult.status === "fulfilled") events.push(...structuredEventsFromHtml(voltaResult.value, { bounds, sourcePage: voltaUrl, verification: "first-party" }));
+  else warnings.push(`VOLTA events page: ${voltaResult.reason?.message || "unavailable"}`);
+  if (eventbriteResult.status === "fulfilled") events.push(...structuredEventsFromHtml(eventbriteResult.value, { bounds, sourcePage: eventbriteUrl, verification: "public-eventbrite", requireVoltaLocation: true }));
+  else warnings.push(`Eventbrite fallback: ${eventbriteResult.reason?.message || "unavailable"}`);
+  const unique = [...new Map(events.map((item) => [canonicalUrl(item.url) || `${item.title}|${String(item.startDate).slice(0, 10)}`, item])).values()]
     .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-  return { month: bounds.value, source: url, events: unique };
+  const hydrated = await Promise.all(unique.map(async (event) => {
+    if (event.imageUrl || !isEventbriteUrl(event.url)) return event;
+    try {
+      const discovered = await discoverEventImage({ sourceUrl: event.url });
+      return { ...event, imageUrl: discovered.imageUrl, imageAlt: `${event.title} event image`, imageSource: "eventbrite" };
+    } catch (error) {
+      warnings.push(`Image for ${event.title}: ${error.message}`);
+      return event;
+    }
+  }));
+  return { month: bounds.value, source: voltaUrl, sources: [voltaUrl, eventbriteUrl], warnings, events: hydrated };
+}
+
+export async function syncNewsletterEvents({ workspacePath, month, collectedEvents }) {
+  const issueMonth = monthBounds(month).value;
+  const collection = collectedEvents ? { month: issueMonth, events: collectedEvents, warnings: [], sources: [] } : await collectVoltaEvents(issueMonth);
+  const { target, data } = await readInboxFile(workspacePath);
+  const existing = data.items.filter((item) => item.month === issueMonth && item.type === "event");
+  const added = [];
+  const skipped = [];
+  for (const event of collection.events) {
+    const local = eventLocalParts(event.startDate, event.endDate);
+    const same = existing.find((item) => (item.sourceUrl && canonicalUrl(item.sourceUrl) === canonicalUrl(event.url)) || (item.title.toLowerCase() === event.title.toLowerCase() && item.date === local.date));
+    if (same) { skipped.push({ id: same.id, title: same.title, reason: "existing item preserved" }); continue; }
+    const now = new Date().toISOString();
+    const source = event.verification === "first-party" ? "volta_website" : "eventbrite";
+    const item = {
+      id: randomUUID(), month: issueMonth, type: "event", title: event.title, summary: event.summary,
+      date: local.date, time: local.time, endTime: local.endTime, source, sourceUrl: event.url || null,
+      personOrCompany: "VOLTA Halifax", location: event.location || "VOLTA", imageUrl: event.imageUrl || null,
+      imageAlt: event.imageAlt || (event.imageUrl ? `${event.title} event image` : null), imageSource: event.imageSource || null,
+      notes: `Automatically collected from ${event.source || source}.`, status: "candidate", verification: event.verification || "source_supplied",
+      createdAt: now, updatedAt: now,
+    };
+    data.items.push(item); existing.push(item); added.push(item);
+  }
+  await writeInboxFile(target, data);
+  return { month: issueMonth, savedTo: target, addedCount: added.length, preservedCount: skipped.length, added, skipped, warnings: collection.warnings || [], sources: collection.sources || [] };
 }
 
 export async function collectVoltaStories(limit = 20) {

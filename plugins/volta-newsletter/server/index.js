@@ -4,16 +4,16 @@ import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { addNewsletterItem, collectLinkedInMentions, collectVoltaEvents, collectVoltaStories, createMailchimpDraft, createMailchimpDraftFromStudio, discoverEventImage, exportNewsletterPackage, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, updateNewsletterItem } from "./core.js";
+import { addNewsletterItem, collectLinkedInMentions, collectVoltaEvents, collectVoltaStories, createMailchimpDraft, createMailchimpDraftFromStudio, discoverEventImage, exportNewsletterPackage, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, syncNewsletterEvents, updateNewsletterItem } from "./core.js";
 
 const server = new McpServer(
-  { name: "volta-newsletter", version: "0.3.0" },
+  { name: "volta-newsletter", version: "0.4.0" },
   { instructions: "Collect sourced VOLTA material and generate reviewable newsletter drafts. Never send or schedule email. Create an unsent Mailchimp draft only after explicit user approval." },
 );
 const asText = (value, summary) => ({ structuredContent: value, content: [{ type: "text", text: summary || JSON.stringify(value, null, 2) }] });
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).describe("Issue month in YYYY-MM format");
 const here = path.dirname(fileURLToPath(import.meta.url));
-const STUDIO_URI = "ui://volta-newsletter/studio-v9.html";
+const STUDIO_URI = "ui://volta-newsletter/studio-v10.html";
 const imageValueSchema = z.string().max(8_000_000).refine((value) => /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(value) || /^https:\/\//i.test(value), "Image must be an HTTPS URL or uploaded image");
 const engagementCtaSchema = z.object({
   enabled: z.boolean().default(true),
@@ -41,7 +41,7 @@ server.registerTool("add_newsletter_item", {
   inputSchema: {
     workspacePath: z.string().min(1), month: monthSchema, type: z.enum(["community_win", "event", "past_event"]),
     title: z.string().min(1), summary: z.string().min(1), date: z.string().optional(), time: z.string().optional(), endTime: z.string().optional(),
-    source: z.enum(["manual", "slack", "linkedin", "one_to_one", "volta_website"]), sourceUrl: z.string().url().optional(),
+    source: z.enum(["manual", "slack", "linkedin", "one_to_one", "volta_website", "eventbrite"]), sourceUrl: z.string().url().optional(),
     personOrCompany: z.string().optional(), location: z.string().optional(), notes: z.string().optional(),
     imageUrl: imageValueSchema.optional(), imageAlt: z.string().max(240).optional(), imageSource: z.enum(["eventbrite", "upload", "manual_url"]).optional(),
     status: z.enum(["candidate", "approved", "excluded"]).default("candidate"),
@@ -159,10 +159,20 @@ server.registerTool("record_newsletter_issue", {
 }, async (input) => asText(await recordNewsletterIssue(input)));
 
 server.registerTool("collect_volta_events", {
-  description: "Collect first-party VOLTA events for one calendar month from voltaeffect.com.",
+  description: "Collect one calendar month of events from VOLTA's first-party events page, then supplement missing Volta-hosted listings from public Eventbrite structured data.",
   inputSchema: { month: monthSchema },
   annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
 }, async ({ month }) => asText(await collectVoltaEvents(month)));
+
+server.registerTool("sync_newsletter_events", {
+  title: "Refresh monthly VOLTA events",
+  description: "Automatically add verified monthly events from VOLTA's events page and public Eventbrite fallback to the editable inbox. Existing and excluded items are preserved so user edits are never overwritten.",
+  inputSchema: { workspacePath: z.string().min(1), month: monthSchema },
+  annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
+}, async (input) => {
+  const result = await syncNewsletterEvents(input);
+  return asText(result, `Added ${result.addedCount} monthly events and preserved ${result.preservedCount} existing edited events.`);
+});
 
 server.registerTool("collect_volta_stories", {
   description: "Collect recent first-party story candidates from VOLTA's public blog.",

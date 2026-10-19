@@ -4,7 +4,7 @@ enabled = true
 [plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter]
 enabled = true
 default_tools_approval_mode = "prompt"
-enabled_tools = ["add_newsletter_item", "list_newsletter_items", "update_newsletter_item", "discover_event_image", "open_newsletter_studio", "save_newsletter_draft", "export_newsletter_package", "create_mailchimp_draft_from_studio", "read_newsletter_memory", "record_newsletter_issue", "collect_volta_events", "collect_volta_stories", "collect_linkedin_mentions", "read_linkedin_queue", "render_newsletter_html", "create_mailchimp_draft"]
+enabled_tools = ["add_newsletter_item", "list_newsletter_items", "update_newsletter_item", "discover_event_image", "open_newsletter_studio", "save_newsletter_draft", "export_newsletter_package", "create_mailchimp_draft_from_studio", "read_newsletter_memory", "record_newsletter_issue", "collect_volta_events", "sync_newsletter_events", "collect_volta_stories", "collect_linkedin_mentions", "read_linkedin_queue", "render_newsletter_html", "create_mailchimp_draft"]
 
 [plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.add_newsletter_item]
 approval_mode = "prompt"
@@ -38,6 +38,9 @@ approval_mode = "prompt"
 
 [plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.collect_volta_events]
 approval_mode = "approve"
+
+[plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.sync_newsletter_events]
+approval_mode = "prompt"
 
 [plugins."volta-newsletter@volta-newsletter-repo".mcp_servers.volta_newsletter.tools.collect_volta_stories]
 approval_mode = "approve"

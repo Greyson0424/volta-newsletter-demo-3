@@ -8,6 +8,7 @@ import {
   exportNewsletterPackage,
   listNewsletterItems,
   saveNewsletterDraft,
+  syncNewsletterEvents,
   updateNewsletterItem,
 } from "./core.js";
 
@@ -49,6 +50,7 @@ const handlers = {
   list_newsletter_items: (input) => listNewsletterItems({ ...input, workspacePath }),
   update_newsletter_item: (input) => updateNewsletterItem({ ...input, workspacePath }),
   save_newsletter_draft: (input) => saveNewsletterDraft({ ...input, workspacePath }),
+  sync_newsletter_events: (input) => syncNewsletterEvents({ ...input, workspacePath }),
   export_newsletter_package: (input) => exportNewsletterPackage({ ...input, workspacePath }),
 };
 
