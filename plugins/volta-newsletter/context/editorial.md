@@ -9,7 +9,7 @@ The voice is optimistic, useful, grounded, and community-led. Prefer concrete ou
 ## Default issue structure
 
 1. A brief opening note framing the month.
-2. `Community wins`: one or two verified stories, never more than two.
+2. `Community updates`: any number of verified stories or opportunities selected for the issue.
 3. `What's happening at VOLTA`: four to eight upcoming events in chronological order when enough verified events are available.
 4. One focused call to action.
 5. Contact and compliance footer.

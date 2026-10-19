@@ -1,6 +1,6 @@
 {
   "name": "volta-newsletter-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,9 +9,10 @@
     "studio": "node server/studio-server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.2",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "cheerio": "^1.1.2",
-    "handlebars": "^4.7.8",
+    "handlebars": "^4.7.10",
+    "jszip": "^3.10.2",
     "zod": "^3.25.76"
   }
 }

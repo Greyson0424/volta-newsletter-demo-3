@@ -4,16 +4,17 @@ import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { addNewsletterItem, collectLinkedInMentions, collectVoltaEvents, collectVoltaStories, createMailchimpDraft, createMailchimpDraftFromStudio, exportNewsletterPackage, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, updateNewsletterItem } from "./core.js";
+import { addNewsletterItem, collectLinkedInMentions, collectVoltaEvents, collectVoltaStories, createMailchimpDraft, createMailchimpDraftFromStudio, discoverEventImage, exportNewsletterPackage, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, updateNewsletterItem } from "./core.js";
 
 const server = new McpServer(
-  { name: "volta-newsletter", version: "0.2.0" },
+  { name: "volta-newsletter", version: "0.3.0" },
   { instructions: "Collect sourced VOLTA material and generate reviewable newsletter drafts. Never send or schedule email. Create an unsent Mailchimp draft only after explicit user approval." },
 );
 const asText = (value, summary) => ({ structuredContent: value, content: [{ type: "text", text: summary || JSON.stringify(value, null, 2) }] });
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).describe("Issue month in YYYY-MM format");
 const here = path.dirname(fileURLToPath(import.meta.url));
-const STUDIO_URI = "ui://volta-newsletter/studio-v8.html";
+const STUDIO_URI = "ui://volta-newsletter/studio-v9.html";
+const imageValueSchema = z.string().max(8_000_000).refine((value) => /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(value) || /^https:\/\//i.test(value), "Image must be an HTTPS URL or uploaded image");
 const engagementCtaSchema = z.object({
   enabled: z.boolean().default(true),
   type: z.enum(["general", "reply", "event", "program", "survey", "custom"]).default("reply"),
@@ -38,10 +39,11 @@ server.registerResource("volta-newsletter-studio", STUDIO_URI, {
 server.registerTool("add_newsletter_item", {
   description: "Save a community win or event from Slack, LinkedIn, a 1:1 conversation, or manual entry into the reviewable newsletter inbox.",
   inputSchema: {
-    workspacePath: z.string().min(1), month: monthSchema, type: z.enum(["community_win", "event"]),
+    workspacePath: z.string().min(1), month: monthSchema, type: z.enum(["community_win", "event", "past_event"]),
     title: z.string().min(1), summary: z.string().min(1), date: z.string().optional(), time: z.string().optional(), endTime: z.string().optional(),
     source: z.enum(["manual", "slack", "linkedin", "one_to_one", "volta_website"]), sourceUrl: z.string().url().optional(),
     personOrCompany: z.string().optional(), location: z.string().optional(), notes: z.string().optional(),
+    imageUrl: imageValueSchema.optional(), imageAlt: z.string().max(240).optional(), imageSource: z.enum(["eventbrite", "upload", "manual_url"]).optional(),
     status: z.enum(["candidate", "approved", "excluded"]).default("candidate"),
   },
   annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
@@ -58,14 +60,22 @@ server.registerTool("update_newsletter_item", {
   inputSchema: {
     workspacePath: z.string().min(1), id: z.string().uuid(),
     changes: z.object({
-      month: monthSchema.optional(), type: z.enum(["community_win", "event"]).optional(), title: z.string().min(1).optional(), summary: z.string().min(1).optional(), date: z.string().nullable().optional(), time: z.string().nullable().optional(), endTime: z.string().nullable().optional(),
+      month: monthSchema.optional(), type: z.enum(["community_win", "event", "past_event"]).optional(), title: z.string().min(1).optional(), summary: z.string().min(1).optional(), date: z.string().nullable().optional(), time: z.string().nullable().optional(), endTime: z.string().nullable().optional(),
       sourceUrl: z.string().url().nullable().optional(), personOrCompany: z.string().nullable().optional(), location: z.string().nullable().optional(),
+      imageUrl: imageValueSchema.nullable().optional(), imageAlt: z.string().max(240).nullable().optional(), imageSource: z.enum(["eventbrite", "upload", "manual_url"]).nullable().optional(),
       notes: z.string().nullable().optional(), status: z.enum(["candidate", "approved", "excluded"]).optional(),
       verification: z.enum(["needs_confirmation", "source_supplied", "verified"]).optional(),
     }).refine((value) => Object.keys(value).length > 0, "At least one change is required"),
   },
   annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
 }, async (input) => asText(await updateNewsletterItem(input)));
+
+server.registerTool("discover_event_image", {
+  title: "Find Eventbrite event image",
+  description: "Read public Eventbrite page metadata and return image candidates for review in Newsletter Studio. This does not bypass access controls.",
+  inputSchema: { sourceUrl: z.string().url() },
+  annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
+}, async (input) => asText(await discoverEventImage(input)));
 
 server.registerTool("open_newsletter_studio", {
   title: "Open VOLTA Newsletter Studio",
@@ -89,10 +99,10 @@ server.registerTool("open_newsletter_studio", {
 
 server.registerTool("save_newsletter_draft", {
   title: "Save VOLTA newsletter draft",
-  description: "Regenerate editable Markdown and branded HTML from the current non-excluded studio items. Community wins are shown first and capped at two; dated events receive Google and Outlook calendar links.",
+  description: "Regenerate editable Markdown and branded HTML from all current non-excluded studio items. Community updates appear first; dated events receive Google and Outlook calendar links.",
   inputSchema: {
     workspacePath: z.string().min(1), month: monthSchema,
-    subjectLine: z.string().min(1).max(100), previewText: z.string().max(160).default(""), opening: z.string().min(1).max(2000),
+    subjectLine: z.string().min(1).max(100), previewText: z.string().max(160).default(""), greeting: z.string().max(120).optional(), opening: z.string().min(1).max(2000),
     engagementCta: engagementCtaSchema.optional(),
   },
   annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
@@ -103,10 +113,10 @@ server.registerTool("save_newsletter_draft", {
 
 server.registerTool("export_newsletter_package", {
   title: "Export for Mailchimp",
-  description: "Create a Mailchimp-ready handoff package containing editable Markdown, email-safe HTML, plain text, section-by-section builder copy, a structured JSON manifest, and one ICS file per dated event.",
+  description: "Create a Mailchimp-ready handoff containing editable Markdown, email-safe HTML, plain text, section copy, structured JSON, a Mailchimp ZIP with selected images, and one ICS file per dated event.",
   inputSchema: {
     workspacePath: z.string().min(1), month: monthSchema,
-    subjectLine: z.string().min(1).max(100), previewText: z.string().max(160).default(""), opening: z.string().min(1).max(2000),
+    subjectLine: z.string().min(1).max(100), previewText: z.string().max(160).default(""), greeting: z.string().max(120).optional(), opening: z.string().min(1).max(2000),
     engagementCta: engagementCtaSchema.optional(),
   },
   annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
@@ -120,7 +130,7 @@ server.registerTool("create_mailchimp_draft_from_studio", {
   description: "Regenerate the current studio content and upload it to Mailchimp as an unsent campaign draft. This tool cannot send or schedule email and requires an explicit user click or request.",
   inputSchema: {
     workspacePath: z.string().min(1), month: monthSchema,
-    subjectLine: z.string().min(1).max(100), previewText: z.string().max(160).default(""), opening: z.string().min(1).max(2000),
+    subjectLine: z.string().min(1).max(100), previewText: z.string().max(160).default(""), greeting: z.string().max(120).optional(), opening: z.string().min(1).max(2000),
     engagementCta: engagementCtaSchema.optional(),
   },
   annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
@@ -172,14 +182,16 @@ server.registerTool("read_linkedin_queue", {
   annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
 }, async ({ queuePath }) => asText(await readLinkedInQueue(queuePath)));
 
-const winSchema = z.object({ headline: z.string(), summary: z.string(), url: z.string().url() });
+const contentImageSchema = { imageUrl: imageValueSchema.nullable().optional(), imageAlt: z.string().optional(), imageSource: z.enum(["eventbrite", "upload", "manual_url"]).nullable().optional(), hasImage: z.boolean().optional() };
+const winSchema = z.object({ headline: z.string(), summary: z.string(), url: z.string().url(), ...contentImageSchema });
 const eventSchema = z.object({
   title: z.string(), date: z.string(), location: z.string().optional(), summary: z.string(), url: z.string().url(),
   googleCalendarUrl: z.string().url().optional(), outlookCalendarUrl: z.string().url().optional(),
+  ...contentImageSchema,
 });
 const newsletterSchema = z.object({
-  monthLabel: z.string(), title: z.string(), preheader: z.string(), openingHtml: z.string(),
-  communityWins: z.array(winSchema).default([]), events: z.array(eventSchema).default([]),
+  monthLabel: z.string(), title: z.string(), preheader: z.string(), greeting: z.string().optional(), readingMinutes: z.number().int().positive().optional(), openingHtml: z.string(),
+  communityWins: z.array(winSchema).default([]), events: z.array(eventSchema).default([]), pastEvents: z.array(eventSchema).default([]),
   callToAction: z.object({ heading: z.string(), body: z.string(), url: z.string(), label: z.string(), deadline: z.string().nullable().optional() }).nullable().optional(),
 });
 

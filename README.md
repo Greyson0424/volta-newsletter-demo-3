@@ -48,7 +48,7 @@ Cursor reads the root `AGENTS.md` and the project-specific `.cursor/mcp.json`.
 
 ### 4. Send through Mailchimp
 
-Select **Export for Mailchimp** in Newsletter Studio. Upload `outputs/<YYYY-MM>/volta-newsletter.html` through Mailchimp’s **Code your own → Import HTML** flow, or use `mailchimp-copy.md` with Mailchimp’s visual builder. Always send a test email before publishing.
+Select **Export for Mailchimp** in Newsletter Studio. Mailchimp users can import `outputs/<YYYY-MM>/volta-newsletter-mailchimp.zip` through **Code your own → Import ZIP** so uploaded and available Eventbrite photos travel with the layout. The standalone HTML and `mailchimp-copy.md` remain available as fallbacks. Always send a test email before publishing.
 
 ## Where to edit the newsletter
 
@@ -58,7 +58,7 @@ The editable interface is **Newsletter Studio**. In Codex it renders inside the 
 2. Restart Codex after the first installation or after updating the plugin.
 3. Start a **new task inside that project**. Existing tasks do not hot-load newly installed plugin tools.
 4. Type `newsletter`, or select **VOLTA Newsletter** from the skill/plugin picker.
-5. After research and drafting, Codex opens **Newsletter Studio** in the task. Use its fields to edit the subject, preview text, opening, events, start/end times, links, locations, up to two community wins, and one focused Community Call to Action. Each item can be edited or removed.
+5. After research and drafting, Codex opens **Newsletter Studio** in the task. Use Editor, Split, or Preview mode and the larger fields to edit the greeting, subject, preview text, opening, unlimited community updates, upcoming events, past-event recaps, dates, links, locations, photos, and one focused Community Call to Action. Each item and photo can be edited or removed.
 6. Select **Save draft** to refresh the Markdown and branded HTML, or **Export for Mailchimp** for the handoff files.
 
 If Codex opens only an HTML or Markdown file, close that task, restart Codex, and begin a new task under this project. That means the task began before the plugin tools were loaded.
@@ -83,9 +83,9 @@ Then open the repository as a trusted Codex project, start a new task, and type:
 newsletter
 ```
 
-Codex gathers the source material and then opens the embedded **Newsletter Studio**. In that panel you can choose Event or Community win, enter the title, description, link, date, start/end time and location, edit or remove existing cards, customize the subject and opening note, and save refreshed Markdown plus HTML. Community wins appear above events and each issue allows a maximum of two wins.
+Codex gathers the source material and then opens the embedded **Newsletter Studio**. In that panel you can choose Upcoming event, Community update, or Past event recap; enter the title, description, link, date, time, and location; and edit or remove existing cards. Community updates appear above events and have no item limit. Eventbrite links can supply a suggested photo automatically, while any photo can be uploaded, replaced by URL, or removed.
 
-Select **Export for Mailchimp** for a provider-independent handoff. It creates editable Markdown, branded HTML, plain text, section-by-section Mailchimp copy, a structured JSON manifest, and one .ics file for each dated event. Newsletter event cards include one-click Google Calendar and Outlook Calendar links. The Community Call to Action can invite a reply, event registration, program application, survey response, or custom action; eligible web destinations receive monthly UTM tracking automatically. Direct Mailchimp API integration remains optional and hidden from the default editor.
+Select **Export for Mailchimp** for a provider-independent handoff. It creates editable Markdown, branded HTML, a Mailchimp ZIP with selected images, plain text, section-by-section Mailchimp copy, a structured JSON manifest, and one .ics file for each dated event. Newsletter event cards include one-click Google Calendar and Outlook Calendar links. The Community Call to Action can invite a reply, event registration, program application, survey response, or custom action; eligible web destinations receive monthly UTM tracking automatically. Direct Mailchimp API integration remains optional and hidden from the default editor.
 
 Other useful commands:
 

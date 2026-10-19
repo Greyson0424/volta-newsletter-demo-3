@@ -3,19 +3,20 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { addNewsletterItem, collectLinkedInMentions, exportNewsletterPackage, getMailchimpSetupStatus, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, updateNewsletterItem } from "./core.js";
+import JSZip from "jszip";
+import { addNewsletterItem, collectLinkedInMentions, exportNewsletterPackage, extractEventbriteImageCandidates, getMailchimpSetupStatus, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, updateNewsletterItem } from "./core.js";
 
 test("renders branded HTML and contact footer", async () => {
   const target = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "volta-newsletter-")), "issue.html");
   const result = await renderNewsletterHtml({
     monthLabel: "September 2026", title: "What's building this month", preheader: "VOLTA community news and events.",
-    openingHtml: "<p>Welcome to the monthly update.</p>",
+    greeting: "Hi Network Members,", readingMinutes: 2, openingHtml: "<p>Welcome to the monthly update.</p>",
     communityWins: [{ headline: "A community win", summary: "A verified result.", url: "https://voltaeffect.com/blog" }],
     events: [{ title: "Founder meetup", date: "September 24", location: "VOLTA", summary: "Meet fellow builders.", url: "https://voltaeffect.com/events" }],
     callToAction: { heading: "Join us", body: "See what's next.", url: "https://voltaeffect.com/events", label: "View events" },
   }, target);
   assert.equal(result.savedTo, target);
-  assert.match(result.html, /#05D9E7/i);
+  assert.match(result.html, /linear-gradient/i);
   assert.match(result.html, /1800 Argyle Street/);
   assert.match(result.html, /\*\|UNSUB\|\*/);
 });
@@ -65,7 +66,7 @@ test("records issue memory idempotently for story deduplication", async () => {
   assert.match(memory.content, /https:\/\/example\.com\/launch/);
 });
 
-test("studio draft puts community wins first and limits them to two", async () => {
+test("studio draft puts every community update before events", async () => {
   const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "volta-studio-"));
   for (const [index, title] of ["First win", "Second win", "Third win"].entries()) {
     await addNewsletterItem({ workspacePath, month: "2026-09", type: "community_win", title, summary: `Win ${index + 1}`, source: "manual", sourceUrl: `https://example.com/win-${index + 1}` });
@@ -84,20 +85,20 @@ test("studio draft puts community wins first and limits them to two", async () =
     },
   });
   assert.equal(result.eventCount, 1);
-  assert.equal(result.communityWinCount, 2);
-  assert.equal(result.omittedWinCount, 1);
+  assert.equal(result.communityWinCount, 3);
+  assert.equal(result.omittedWinCount, 0);
   const html = await fs.readFile(result.htmlPath, "utf8");
-  assert.ok(html.indexOf(">Community wins</h2>") < html.indexOf(">What's happening at VOLTA</h2>"));
+  assert.ok(html.indexOf("Community updates &amp; opportunities") < html.indexOf("Events &amp; Networking Opportunities"));
   assert.match(html, /September 28, 2026 at 17:30/);
   assert.match(html, /Google Calendar/);
   assert.match(html, /Outlook Calendar/);
   assert.match(html, /Apply to the next cohort/);
-  assert.match(html, /Respond by 2026-09-30/);
+  assert.match(html, /Deadline: 2026-09-30/);
   assert.match(html, /utm_source/);
   assert.match(html, /utm_campaign/);
-  assert.doesNotMatch(html, /Third win/);
+  assert.match(html, /Third win/);
   const markdown = await fs.readFile(result.draftPath, "utf8");
-  assert.ok(markdown.indexOf("## Community wins") < markdown.indexOf("## What’s happening at VOLTA"));
+  assert.ok(markdown.indexOf("## Community updates") < markdown.indexOf("## What’s happening at VOLTA"));
   const reopened = await listNewsletterItems({ workspacePath, month: "2026-09" });
   assert.equal(reopened.settings.engagementCta.heading, "Apply to the next cohort");
   assert.equal(reopened.settings.engagementCta.destination, "https://voltaeffect.com/programs?ref=studio");
@@ -123,12 +124,18 @@ test("Mailchimp setup status reports names without exposing values", () => {
   }
 });
 
+test("extracts the preferred public Eventbrite image from structured metadata", () => {
+  const html = '<html><head><meta property="og:image" content="https://example.com/fallback.jpg"><script type="application/ld+json">{"@type":"Event","image":["https://img.evbuc.com/preferred.jpg"]}</script></head></html>';
+  assert.deepEqual(extractEventbriteImageCandidates(html), ["https://img.evbuc.com/preferred.jpg", "https://example.com/fallback.jpg"]);
+});
+
 test("exports a complete provider-independent handoff package", async () => {
   const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "volta-export-"));
   await addNewsletterItem({
     workspacePath, month: "2026-09", type: "event", title: "Founder Friday",
     summary: "A practical founder gathering.", source: "manual", sourceUrl: "https://example.com/founder-friday",
     date: "2026-09-25", time: "09:00", endTime: "10:30", location: "VOLTA",
+    imageUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", imageAlt: "Founder Friday event", imageSource: "upload",
   });
   await addNewsletterItem({
     workspacePath, month: "2026-09", type: "community_win", title: "Member launch",
@@ -149,7 +156,7 @@ test("exports a complete provider-independent handoff package", async () => {
   assert.match(handoff, /## Subject line/);
   assert.match(handoff, /Founder Friday/);
   assert.match(handoff, /Member launch/);
-  assert.ok(handoff.indexOf("## Community wins") < handoff.indexOf("## Events"));
+  assert.ok(handoff.indexOf("## Community updates") < handoff.indexOf("## Events"));
   const manifest = JSON.parse(await fs.readFile(result.files.manifest, "utf8"));
   assert.equal(manifest.events[0].time, "09:00");
   assert.equal(manifest.events[0].endTime, "10:30");
@@ -160,6 +167,9 @@ test("exports a complete provider-independent handoff package", async () => {
   assert.match(manifest.engagementCta.url, /^mailto:wins@voltaeffect\.com\?subject=/);
   assert.match(handoff, /## Community call to action/);
   assert.equal(result.files.calendarFiles.length, 1);
+  const archive = await JSZip.loadAsync(await fs.readFile(result.files.mailchimpZip));
+  assert.ok(archive.file("volta-newsletter.html"));
+  assert.ok(Object.keys(archive.files).some((name) => name.startsWith("images/")));
   const calendar = await fs.readFile(result.files.calendarFiles[0], "utf8");
   assert.match(calendar, /BEGIN:VCALENDAR/);
   assert.match(calendar, /DTSTART;TZID=America\/Halifax:20260925T090000/);

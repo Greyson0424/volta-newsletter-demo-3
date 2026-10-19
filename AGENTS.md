@@ -8,7 +8,7 @@ When the user types `newsletter`, `newsletter draft`, or asks for a monthly VOLT
 
 Every newsletter request must end with Newsletter Studio as the editing surface. In Codex, call `open_newsletter_studio`. In Claude Code or Cursor, or whenever the MCP App resource does not render, run `npm run studio --prefix plugins/volta-newsletter` and provide `http://127.0.0.1:4173`. Never present an opened output file as the editor.
 
-When the user types `add community win:` or `add event:`, use the same skill to save the item to the newsletter inbox. The Codex conversation is the intake and editing interface.
+When the user types `add community win:`, `add event:`, or `add past event:`, use the same skill to save the item to the newsletter inbox. Newsletter Studio is the primary intake and editing interface.
 
 - Default to the current calendar month in `America/Halifax` unless the user names another month.
 - Gather current source material before drafting. Keep the source URL and publication/event date for every factual item.
@@ -17,6 +17,7 @@ When the user types `add community win:` or `add event:`, use the same skill to 
 - If the Slack plugin is connected, search Slack for leads and retain permalinks. Otherwise continue with the other sources and report that Slack discovery was skipped.
 - Use `collect_linkedin_mentions` when approved LinkedIn organization credentials are configured. Otherwise treat LinkedIn discovery as incomplete unless it came from a supplied URL. Never bypass LinkedIn access controls or scrape authenticated pages.
 - Produce editable Markdown and branded, email-safe HTML under `outputs/<YYYY-MM>/`.
+- Keep every selected community update; there is no section item limit. Use `discover_event_image` for public Eventbrite links, while always allowing the user to replace or remove the result.
 - A request for a newsletter or newsletter draft authorizes research and local draft creation only.
 - Never send, schedule, or publish a campaign. Create a Mailchimp draft only when the user explicitly asks for that external action; the MCP server intentionally exposes no send tool.
 - If credentials are missing, finish the local draft and report only the missing setup fields.

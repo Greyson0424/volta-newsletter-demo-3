@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addNewsletterItem,
+  discoverEventImage,
   exportNewsletterPackage,
   listNewsletterItems,
   saveNewsletterDraft,
@@ -36,7 +37,7 @@ async function requestBody(request) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1_000_000) throw new Error("Request is too large");
+    if (size > 8_500_000) throw new Error("Request is too large");
     chunks.push(chunk);
   }
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
@@ -44,6 +45,7 @@ async function requestBody(request) {
 
 const handlers = {
   add_newsletter_item: (input) => addNewsletterItem({ ...input, workspacePath }),
+  discover_event_image: (input) => discoverEventImage(input),
   list_newsletter_items: (input) => listNewsletterItems({ ...input, workspacePath }),
   update_newsletter_item: (input) => updateNewsletterItem({ ...input, workspacePath }),
   save_newsletter_draft: (input) => saveNewsletterDraft({ ...input, workspacePath }),

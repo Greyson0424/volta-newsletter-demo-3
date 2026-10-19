@@ -4,13 +4,34 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import * as cheerio from "cheerio";
 import Handlebars from "handlebars";
+import JSZip from "jszip";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..");
 
-const ITEM_TYPES = new Set(["community_win", "event"]);
+const ITEM_TYPES = new Set(["community_win", "event", "past_event"]);
 const ITEM_SOURCES = new Set(["manual", "slack", "linkedin", "one_to_one", "volta_website"]);
 const ITEM_STATUSES = new Set(["candidate", "approved", "excluded"]);
+const IMAGE_SOURCES = new Set(["eventbrite", "upload", "manual_url"]);
+const IMAGE_DATA_PATTERN = /^data:image\/(png|jpe?g|gif|webp);base64,/i;
+const MAX_IMAGE_VALUE_LENGTH = 8_000_000;
+
+function normalizeImageUrl(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const image = String(value).trim();
+  if (image.length > MAX_IMAGE_VALUE_LENGTH) throw new Error("Image is too large; use an image under 5 MB");
+  if (IMAGE_DATA_PATTERN.test(image)) return image;
+  const url = new URL(image);
+  if (url.protocol !== "https:") throw new Error("Image URLs must use HTTPS");
+  return url.toString();
+}
+
+function normalizeImageSource(value, imageUrl) {
+  if (!imageUrl) return null;
+  const source = value || (IMAGE_DATA_PATTERN.test(imageUrl) ? "upload" : "manual_url");
+  if (!IMAGE_SOURCES.has(source)) throw new Error("imageSource is not supported");
+  return source;
+}
 
 function inboxPath(workspacePath) {
   if (!workspacePath) throw new Error("workspacePath is required");
@@ -99,12 +120,89 @@ async function writeInboxFile(target, data) {
   await fs.rename(temporary, target);
 }
 
+function collectStructuredImages(value, images = []) {
+  if (!value) return images;
+  if (Array.isArray(value)) {
+    for (const entry of value) collectStructuredImages(entry, images);
+    return images;
+  }
+  if (typeof value !== "object") return images;
+  if (typeof value.image === "string") images.push(value.image);
+  else if (Array.isArray(value.image)) {
+    for (const image of value.image) {
+      if (typeof image === "string") images.push(image);
+      else if (image && typeof image.url === "string") images.push(image.url);
+    }
+  } else if (value.image && typeof value.image.url === "string") images.push(value.image.url);
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object" && child !== value.image) collectStructuredImages(child, images);
+  }
+  return images;
+}
+
+export function extractEventbriteImageCandidates(html) {
+  const $ = cheerio.load(String(html || ""));
+  const candidates = [];
+  $("script[type='application/ld+json']").each((_, element) => {
+    try {
+      collectStructuredImages(JSON.parse($(element).text()), candidates);
+    } catch {
+      // Ignore malformed structured data and continue to standard social metadata.
+    }
+  });
+  for (const selector of ["meta[property='og:image']", "meta[name='twitter:image']", "meta[property='twitter:image']"]) {
+    const value = $(selector).attr("content");
+    if (value) candidates.push(value);
+  }
+  return [...new Set(candidates.map((value) => {
+    try { return normalizeImageUrl(value); } catch { return null; }
+  }).filter(Boolean))];
+}
+
+function isEventbriteUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && /(^|\.)eventbrite\.[a-z.]+$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export async function discoverEventImage({ sourceUrl }) {
+  if (!isEventbriteUrl(sourceUrl)) throw new Error("Automatic image lookup currently supports public Eventbrite links");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const response = await fetch(sourceUrl, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": "Mozilla/5.0 (compatible; VOLTA Newsletter Studio/1.0; +https://voltaeffect.com)",
+      },
+    });
+    if (!isEventbriteUrl(response.url)) throw new Error("Eventbrite redirected outside its public site; upload or paste an image instead");
+    if (!response.ok) throw new Error(`Eventbrite returned ${response.status}; upload or paste an image instead`);
+    const html = await response.text();
+    if (Buffer.byteLength(html, "utf8") > 3_000_000) throw new Error("Eventbrite page was too large to inspect safely");
+    const candidates = extractEventbriteImageCandidates(html);
+    if (!candidates.length) throw new Error("No public event image was found; upload or paste an image instead");
+    return { sourceUrl, imageUrl: candidates[0], candidates };
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("Eventbrite image lookup timed out; upload or paste an image instead");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function addNewsletterItem(input) {
   const month = monthBounds(input.month).value;
-  if (!ITEM_TYPES.has(input.type)) throw new Error("type must be community_win or event");
+  if (!ITEM_TYPES.has(input.type)) throw new Error("type must be community_win, event, or past_event");
   if (!ITEM_SOURCES.has(input.source)) throw new Error("source is not supported");
   const { target, data } = await readInboxFile(input.workspacePath);
   const now = new Date().toISOString();
+  const imageUrl = normalizeImageUrl(input.imageUrl);
   const item = {
     id: randomUUID(),
     month,
@@ -118,6 +216,9 @@ export async function addNewsletterItem(input) {
     sourceUrl: input.sourceUrl || null,
     personOrCompany: input.personOrCompany || null,
     location: input.location || null,
+    imageUrl,
+    imageAlt: String(input.imageAlt || input.title || "").trim() || null,
+    imageSource: normalizeImageSource(input.imageSource, imageUrl),
     notes: input.notes || null,
     status: input.status || "candidate",
     verification: input.source === "one_to_one" || !input.sourceUrl ? "needs_confirmation" : "source_supplied",
@@ -141,12 +242,14 @@ export async function updateNewsletterItem({ workspacePath, id, changes }) {
   const index = data.items.findIndex((item) => item.id === id);
   if (index < 0) throw new Error(`Newsletter item not found: ${id}`);
   if (changes.status && !ITEM_STATUSES.has(changes.status)) throw new Error("status is not supported");
-  if (changes.type && !ITEM_TYPES.has(changes.type)) throw new Error("type must be community_win or event");
-  const allowed = ["month", "type", "title", "summary", "date", "time", "endTime", "sourceUrl", "personOrCompany", "location", "notes", "status", "verification"];
+  if (changes.type && !ITEM_TYPES.has(changes.type)) throw new Error("type must be community_win, event, or past_event");
+  const allowed = ["month", "type", "title", "summary", "date", "time", "endTime", "sourceUrl", "personOrCompany", "location", "imageUrl", "imageAlt", "imageSource", "notes", "status", "verification"];
   const next = { ...data.items[index] };
   for (const key of allowed) {
     if (changes[key] !== undefined) next[key] = changes[key];
   }
+  next.imageUrl = normalizeImageUrl(next.imageUrl);
+  next.imageSource = normalizeImageSource(next.imageSource, next.imageUrl);
   if (next.month) monthBounds(next.month);
   next.updatedAt = new Date().toISOString();
   data.items[index] = next;
@@ -474,13 +577,29 @@ function normalizeEngagementCta(input, month) {
   };
 }
 
-export async function saveNewsletterDraft({ workspacePath, month, subjectLine, previewText, opening, engagementCta }) {
+function newsletterImage(item) {
+  return item.imageUrl ? {
+    imageUrl: item.imageUrl,
+    imageAlt: String(item.imageAlt || item.title || "VOLTA newsletter image"),
+    imageSource: item.imageSource || "manual_url",
+    hasImage: true,
+  } : { imageUrl: null, imageAlt: "", imageSource: null, hasImage: false };
+}
+
+function estimateReadingMinutes(opening, items) {
+  const words = [opening, ...items.flatMap((item) => [item.title, item.summary])]
+    .join(" ").trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 200));
+}
+
+export async function saveNewsletterDraft({ workspacePath, month, subjectLine, previewText, opening, greeting, engagementCta }) {
   const issueMonth = monthBounds(month).value;
   const listed = await listNewsletterItems({ workspacePath, month: issueMonth });
   const included = listed.items.filter((item) => item.status !== "excluded");
   const events = included.filter((item) => item.type === "event").sort((a, b) => String(a.date || "9999").localeCompare(String(b.date || "9999")));
-  const wins = included.filter((item) => item.type === "community_win").slice(0, 2);
-  const omittedWinCount = Math.max(0, included.filter((item) => item.type === "community_win").length - wins.length);
+  const wins = included.filter((item) => item.type === "community_win");
+  const pastEvents = included.filter((item) => item.type === "past_event").sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const omittedWinCount = 0;
   const label = monthLabel(issueMonth);
   const safeOpening = String(opening || `Here is what is happening across the VOLTA community this ${label}.`).trim();
   const cta = normalizeEngagementCta(engagementCta ?? listed.settings?.engagementCta, issueMonth);
@@ -492,6 +611,7 @@ export async function saveNewsletterDraft({ workspacePath, month, subjectLine, p
       subjectLine: String(subjectLine || "").trim(),
       previewText: String(previewText || "").trim(),
       opening: safeOpening,
+      greeting: String(greeting || "Hi Network Members,").trim(),
     },
   };
   await writeInboxFile(inboxTarget, inboxData);
@@ -499,9 +619,12 @@ export async function saveNewsletterDraft({ workspacePath, month, subjectLine, p
     monthLabel: label,
     title: subjectLine,
     preheader: previewText,
+    greeting: String(greeting || "Hi Network Members,").trim(),
+    readingMinutes: estimateReadingMinutes(safeOpening, [...wins, ...events, ...pastEvents]),
     openingHtml: safeOpening.split(/\n\s*\n/).map((paragraph) => `<p style="margin:0 0 14px;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join(""),
-    events: events.map((item) => ({ title: item.title, date: displayEventDate(item), location: item.location || "VOLTA", summary: item.summary, url: addTrackingParameters(item.sourceUrl || "https://voltaeffect.com/events", issueMonth), ...calendarDetails(item) })),
-    communityWins: wins.map((item) => ({ headline: item.title, summary: item.summary, url: addTrackingParameters(item.sourceUrl || "https://voltaeffect.com", issueMonth) })),
+    events: events.map((item) => ({ title: item.title, date: displayEventDate(item), location: item.location || "VOLTA", summary: item.summary, url: addTrackingParameters(item.sourceUrl || "https://voltaeffect.com/events", issueMonth), ...newsletterImage(item), ...calendarDetails(item) })),
+    communityWins: wins.map((item) => ({ headline: item.title, summary: item.summary, url: addTrackingParameters(item.sourceUrl || "https://voltaeffect.com", issueMonth), ...newsletterImage(item) })),
+    pastEvents: pastEvents.map((item) => ({ title: item.title, date: displayEventDate(item), summary: item.summary, url: addTrackingParameters(item.sourceUrl || "https://voltaeffect.com/events", issueMonth), ...newsletterImage(item) })),
     callToAction: cta.enabled ? { heading: cta.heading, body: cta.body, url: cta.url, label: cta.buttonLabel, deadline: cta.deadline } : null,
   };
   const outputDirectory = path.join(path.resolve(workspacePath), "outputs", issueMonth);
@@ -509,10 +632,11 @@ export async function saveNewsletterDraft({ workspacePath, month, subjectLine, p
   const draftPath = path.join(outputDirectory, "volta-newsletter-draft.md");
   await fs.mkdir(outputDirectory, { recursive: true });
   const markdown = [
-    `# ${subjectLine}`, ``, `**Preview text:** ${previewText}`, ``, safeOpening, ``, `## Community wins`, ``,
+    `# ${subjectLine}`, ``, `**Preview text:** ${previewText}`, ``, `**${String(greeting || "Hi Network Members,").trim()}**`, ``, safeOpening, ``, `## Community updates`, ``,
     ...(wins.length ? wins.flatMap((item) => [`### ${item.title}`, ``, item.summary, ``, item.sourceUrl ? `[Read the source](${item.sourceUrl})` : "", ``]) : ["_No community wins selected._", ""]),
     `## What’s happening at VOLTA`, ``,
     ...(events.length ? events.flatMap((item) => { const calendar = calendarDetails(item); return [`### ${item.title}`, ``, `**${displayEventDate(item)}${item.location ? ` · ${item.location}` : ""}**`, ``, item.summary, ``, item.sourceUrl ? `[Event details](${item.sourceUrl})` : "", calendar.googleCalendarUrl ? `[Add to Google Calendar](${calendar.googleCalendarUrl}) · [Add to Outlook](${calendar.outlookCalendarUrl})` : "", ``]; }) : ["_No events added yet._", ""]),
+    ...(pastEvents.length ? [`## Past Events Roundup`, ``, ...pastEvents.flatMap((item) => [`### ${item.title}`, ``, `**${displayEventDate(item)}**`, ``, item.summary, ``, item.sourceUrl ? `[Event recap](${item.sourceUrl})` : "", ``])] : []),
     ...(cta.enabled ? [`## ${cta.heading}`, ` `, cta.body, ` `, cta.deadline ? `**Deadline:** ${cta.deadline}` : "", `[${cta.buttonLabel}](${cta.url})`, ` `] : []),
     `---`, `VOLTA · 1800 Argyle Street, Suite 801, Halifax, NS B3J 3N8 · contact@voltaeffect.com`, ``,
   ].join("\n");
@@ -522,7 +646,68 @@ export async function saveNewsletterDraft({ workspacePath, month, subjectLine, p
     workspacePath, month: issueMonth, status: "drafted", draftPath, htmlPath,
     stories: wins.map((item) => ({ title: item.title, url: item.sourceUrl, verification: item.verification })),
   });
-  return { month: issueMonth, draftPath, htmlPath, html: rendered.html, eventCount: events.length, communityWinCount: wins.length, omittedWinCount, engagementCta: cta };
+  return { month: issueMonth, draftPath, htmlPath, html: rendered.html, eventCount: events.length, communityWinCount: wins.length, pastEventCount: pastEvents.length, omittedWinCount, engagementCta: cta };
+}
+
+function imageExtension(mimeType) {
+  const type = String(mimeType || "").toLowerCase().split(";")[0];
+  return ({ "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/gif": "gif", "image/webp": "webp" })[type] || null;
+}
+
+async function fetchEventbriteImage(url) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || !/(^|\.)(eventbrite\.[a-z.]+|evbuc\.com)$/i.test(parsed.hostname)) {
+    throw new Error("Only Eventbrite-hosted automatic images are downloaded into the Mailchimp ZIP");
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const response = await fetch(url, { redirect: "follow", signal: controller.signal, headers: { "user-agent": "VOLTA Newsletter Studio/1.0" } });
+    if (!response.ok) throw new Error(`Image host returned ${response.status}`);
+    const mimeType = response.headers.get("content-type")?.split(";")[0] || "";
+    const extension = imageExtension(mimeType);
+    if (!extension) throw new Error("Image host returned an unsupported file type");
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > 8_000_000) throw new Error("Image is larger than 8 MB");
+    return { buffer, extension };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function buildMailchimpZip(html, outputPath) {
+  const $ = cheerio.load(html, { decodeEntities: false });
+  const zip = new JSZip();
+  const warnings = [];
+  const images = $("img[data-newsletter-image]").toArray();
+  for (const [index, element] of images.entries()) {
+    const image = $(element);
+    const source = image.attr("src") || "";
+    const baseName = `${String(index + 1).padStart(2, "0")}-${safeFileName(image.attr("alt") || "newsletter-image")}`;
+    try {
+      let bundled;
+      if (IMAGE_DATA_PATTERN.test(source)) {
+        const match = source.match(/^data:(image\/[^;]+);base64,(.+)$/is);
+        const extension = imageExtension(match?.[1]);
+        if (!match || !extension) throw new Error("Uploaded image format is not supported");
+        bundled = { buffer: Buffer.from(match[2], "base64"), extension };
+      } else if ((image.attr("data-image-source") || "") === "eventbrite") {
+        bundled = await fetchEventbriteImage(source);
+      } else {
+        continue;
+      }
+      const fileName = `images/${baseName}.${bundled.extension}`;
+      zip.file(fileName, bundled.buffer);
+      image.attr("src", fileName);
+      image.removeAttr("data-newsletter-image").removeAttr("data-image-source");
+    } catch (error) {
+      warnings.push(`${image.attr("alt") || `Image ${index + 1}`}: ${error.message}`);
+    }
+  }
+  zip.file("volta-newsletter.html", $.html());
+  const archive = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
+  await fs.writeFile(outputPath, archive);
+  return { outputPath, warnings };
 }
 
 export async function exportNewsletterPackage(input) {
@@ -530,11 +715,13 @@ export async function exportNewsletterPackage(input) {
   const listed = await listNewsletterItems({ workspacePath: input.workspacePath, month: saved.month });
   const included = listed.items.filter((item) => item.status !== "excluded");
   const events = included.filter((item) => item.type === "event").sort((a, b) => String(a.date || "9999").localeCompare(String(b.date || "9999")));
-  const wins = included.filter((item) => item.type === "community_win").slice(0, 2);
+  const wins = included.filter((item) => item.type === "community_win");
+  const pastEvents = included.filter((item) => item.type === "past_event").sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const outputDirectory = path.dirname(saved.htmlPath);
   const textPath = path.join(outputDirectory, "volta-newsletter.txt");
   const handoffPath = path.join(outputDirectory, "mailchimp-copy.md");
   const manifestPath = path.join(outputDirectory, "newsletter-package.json");
+  const mailchimpZipPath = path.join(outputDirectory, "volta-newsletter-mailchimp.zip");
   const calendarDirectory = path.join(outputDirectory, "calendar");
   await fs.mkdir(calendarDirectory, { recursive: true });
   const calendarFiles = [];
@@ -551,7 +738,7 @@ export async function exportNewsletterPackage(input) {
     "",
     input.opening,
     "",
-    "COMMUNITY WINS",
+    "COMMUNITY UPDATES",
     "",
     ...(wins.length ? wins.flatMap((item) => [
       item.title,
@@ -569,6 +756,7 @@ export async function exportNewsletterPackage(input) {
       ...(calendarDetails(item).googleCalendarUrl ? [`Google Calendar: ${calendarDetails(item).googleCalendarUrl}`, `Outlook Calendar: ${calendarDetails(item).outlookCalendarUrl}`] : []),
       "",
     ]) : ["No events added yet.", ""]),
+    ...(pastEvents.length ? ["PAST EVENTS ROUNDUP", "", ...pastEvents.flatMap((item) => [item.title, displayEventDate(item), item.summary, item.sourceUrl || "https://voltaeffect.com/events", ""])] : []),
     ...(saved.engagementCta.enabled ? [
       saved.engagementCta.heading,
       saved.engagementCta.body,
@@ -589,10 +777,10 @@ export async function exportNewsletterPackage(input) {
     "",
     `## Opening\n\n${input.opening}`,
     "",
-    "## Community wins",
+    "## Community updates",
     "",
     ...(wins.length ? wins.flatMap((item, index) => [
-      `### Community win ${index + 1}: ${item.title}`,
+      `### Community update ${index + 1}: ${item.title}`,
       "",
       `- Link: ${item.sourceUrl || "https://voltaeffect.com"}`,
       "",
@@ -612,6 +800,13 @@ export async function exportNewsletterPackage(input) {
       item.summary,
       "",
     ]) : ["_No events added yet._", ""]),
+    ...(pastEvents.length ? [
+      "## Past Events Roundup", "",
+      ...pastEvents.flatMap((item, index) => [
+        `### Past event ${index + 1}: ${item.title}`, "", `- Date: ${displayEventDate(item)}`,
+        `- Link: ${item.sourceUrl || "https://voltaeffect.com/events"}`, "", item.summary, "",
+      ]),
+    ] : []),
     ...(saved.engagementCta.enabled ? [
       "## Community call to action",
       "",
@@ -632,7 +827,7 @@ export async function exportNewsletterPackage(input) {
     "",
   ].join("\n");
   const manifest = {
-    version: 1,
+    version: 2,
     month: saved.month,
     generatedAt: new Date().toISOString(),
     subjectLine: input.subjectLine,
@@ -641,16 +836,21 @@ export async function exportNewsletterPackage(input) {
     engagementCta: saved.engagementCta,
     events: events.map((item) => ({
       id: item.id, title: item.title, date: item.date, time: item.time, endTime: item.endTime, location: item.location,
-      description: item.summary, link: item.sourceUrl, verification: item.verification, ...calendarDetails(item),
+      description: item.summary, link: item.sourceUrl, imageUrl: item.imageUrl, imageAlt: item.imageAlt, imageSource: item.imageSource, verification: item.verification, ...calendarDetails(item),
     })),
     communityWins: wins.map((item) => ({
-      id: item.id, title: item.title, description: item.summary, link: item.sourceUrl, verification: item.verification,
+      id: item.id, title: item.title, description: item.summary, link: item.sourceUrl, imageUrl: item.imageUrl, imageAlt: item.imageAlt, imageSource: item.imageSource, verification: item.verification,
+    })),
+    pastEvents: pastEvents.map((item) => ({
+      id: item.id, title: item.title, date: item.date, description: item.summary, link: item.sourceUrl,
+      imageUrl: item.imageUrl, imageAlt: item.imageAlt, imageSource: item.imageSource, verification: item.verification,
     })),
     files: {
       editableMarkdown: saved.draftPath,
       emailHtml: saved.htmlPath,
       plainText: textPath,
       mailchimpCopy: handoffPath,
+      mailchimpZip: mailchimpZipPath,
       calendarFiles,
     },
   };
@@ -659,12 +859,15 @@ export async function exportNewsletterPackage(input) {
     fs.writeFile(handoffPath, handoff, "utf8"),
     fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8"),
   ]);
+  const zipResult = await buildMailchimpZip(saved.html, mailchimpZipPath);
   return {
     month: saved.month,
     packageDirectory: outputDirectory,
-    files: { markdown: saved.draftPath, html: saved.htmlPath, plainText: textPath, mailchimpCopy: handoffPath, manifest: manifestPath, calendarFiles },
+    files: { markdown: saved.draftPath, html: saved.htmlPath, plainText: textPath, mailchimpCopy: handoffPath, manifest: manifestPath, mailchimpZip: mailchimpZipPath, calendarFiles },
     eventCount: events.length,
     communityWinCount: wins.length,
+    pastEventCount: pastEvents.length,
+    imageWarnings: zipResult.warnings,
     copyText: text,
   };
 }
@@ -721,7 +924,6 @@ export async function createMailchimpDraftFromStudio(input) {
   const listed = await listNewsletterItems({ workspacePath: input.workspacePath, month: saved.month });
   const stories = listed.items
     .filter((item) => item.status !== "excluded" && item.type === "community_win")
-    .slice(0, 2)
     .map((item) => ({ title: item.title, url: item.sourceUrl, verification: item.verification }));
   await recordNewsletterIssue({
     workspacePath: input.workspacePath,

@@ -14,7 +14,7 @@ Verified against the public VOLTA website on 2026-09-23.
 - Site wordmark: `https://voltaeffect.com/assets/volta-logo.svg`
 - Typography: use email-safe `Arial, Helvetica, sans-serif`. Do not depend on web fonts in email.
 
-Keep the design dark, spacious, direct, and high contrast. Cyan is the main call-to-action color; purple is secondary. Use table-based email layout, inline CSS, a maximum width of 640px, and buttons large enough for touch.
+Match VOLTA's current newsletter pattern: a flat black, spacious, high-contrast canvas; a large white VOLTA wordmark; thin cyan-to-green-to-yellow-to-pink dividers; and image-left, copy-right feature rows that stack cleanly on mobile. Use table-based email layout, inline CSS, a maximum width near 620px, and links or buttons large enough for touch.
 
 ## Contact block
 
