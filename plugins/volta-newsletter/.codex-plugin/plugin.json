@@ -1,6 +1,6 @@
 {
   "name": "volta-newsletter",
-  "version": "0.4.0+codex.20261019",
+  "version": "0.4.1+codex.20261019",
   "description": "Draft sourced, editable, VOLTA-branded monthly newsletters and optionally create unsent Mailchimp campaigns.",
   "author": {
     "name": "VOLTA Halifax"
