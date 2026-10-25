@@ -7,13 +7,13 @@ import { fileURLToPath } from "node:url";
 import { addNewsletterItem, collectLinkedInMentions, collectVoltaEvents, collectVoltaStories, createMailchimpDraft, createMailchimpDraftFromStudio, discoverEventImage, exportNewsletterPackage, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, syncNewsletterEvents, updateNewsletterItem } from "./core.js";
 
 const server = new McpServer(
-  { name: "volta-newsletter", version: "0.4.2" },
+  { name: "volta-newsletter", version: "0.4.3" },
   { instructions: "Collect sourced VOLTA material and generate reviewable newsletter drafts. Never send or schedule email. Create an unsent Mailchimp draft only after explicit user approval." },
 );
 const asText = (value, summary) => ({ structuredContent: value, content: [{ type: "text", text: summary || JSON.stringify(value, null, 2) }] });
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).describe("Issue month in YYYY-MM format");
 const here = path.dirname(fileURLToPath(import.meta.url));
-const STUDIO_URI = "ui://volta-newsletter/studio-v12.html";
+const STUDIO_URI = "ui://volta-newsletter/studio-v13.html";
 const STUDIO_RESOURCE_DOMAINS = ["https://voltaeffect.com", "https://img.evbuc.com", "https://cdn.evbuc.com"];
 const imageValueSchema = z.string().max(8_000_000).refine((value) => /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(value) || /^https:\/\//i.test(value), "Image must be an HTTPS URL or uploaded image");
 const engagementCtaSchema = z.object({
@@ -40,7 +40,6 @@ server.registerResource("volta-newsletter-studio", STUDIO_URI, {
       csp: { connectDomains: [], resourceDomains: STUDIO_RESOURCE_DOMAINS },
     },
     "openai/widgetCSP": { connect_domains: [], resource_domains: STUDIO_RESOURCE_DOMAINS },
-    "openai/ui": { availableDisplayModes: ["fullscreen"] },
   },
 }] }));
 
