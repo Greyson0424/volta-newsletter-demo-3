@@ -7,7 +7,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.resolve(here, "index.js");
-const studioUri = "ui://volta-newsletter/studio-v13.html";
+const studioUri = "ui://volta-newsletter/studio-v15.html";
 
 test("MCP serves a Codex-compatible newsletter studio resource", async () => {
   const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath] });
@@ -27,6 +27,7 @@ test("MCP serves a Codex-compatible newsletter studio resource", async () => {
     const tools = await client.listTools();
     const openStudio = tools.tools.find((tool) => tool.name === "open_newsletter_studio");
     assert.equal(openStudio?._meta?.ui?.resourceUri, studioUri);
+    assert.equal(openStudio?._meta?.["ui/resourceUri"], studioUri);
   } finally {
     await client.close();
   }

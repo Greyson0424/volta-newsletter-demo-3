@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -7,13 +8,13 @@ import { fileURLToPath } from "node:url";
 import { addNewsletterItem, collectLinkedInMentions, collectVoltaEvents, collectVoltaStories, createMailchimpDraft, createMailchimpDraftFromStudio, discoverEventImage, exportNewsletterPackage, listNewsletterItems, readLinkedInQueue, readNewsletterMemory, recordNewsletterIssue, renderNewsletterHtml, saveNewsletterDraft, syncNewsletterEvents, updateNewsletterItem } from "./core.js";
 
 const server = new McpServer(
-  { name: "volta-newsletter", version: "0.4.3" },
+  { name: "volta-newsletter", version: "0.4.5" },
   { instructions: "Collect sourced VOLTA material and generate reviewable newsletter drafts. Never send or schedule email. Create an unsent Mailchimp draft only after explicit user approval." },
 );
 const asText = (value, summary) => ({ structuredContent: value, content: [{ type: "text", text: summary || JSON.stringify(value, null, 2) }] });
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).describe("Issue month in YYYY-MM format");
 const here = path.dirname(fileURLToPath(import.meta.url));
-const STUDIO_URI = "ui://volta-newsletter/studio-v13.html";
+const STUDIO_URI = "ui://volta-newsletter/studio-v15.html";
 const STUDIO_RESOURCE_DOMAINS = ["https://voltaeffect.com", "https://img.evbuc.com", "https://cdn.evbuc.com"];
 const imageValueSchema = z.string().max(8_000_000).refine((value) => /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(value) || /^https:\/\//i.test(value), "Image must be an HTTPS URL or uploaded image");
 const engagementCtaSchema = z.object({
@@ -26,13 +27,12 @@ const engagementCtaSchema = z.object({
   deadline: z.string().max(50).optional(),
 });
 
-server.registerResource("volta-newsletter-studio", STUDIO_URI, {
+registerAppResource(server, "volta-newsletter-studio", STUDIO_URI, {
   title: "VOLTA Newsletter Studio",
   description: "Editable monthly newsletter intake and preview workspace.",
-  mimeType: "text/html;profile=mcp-app",
 }, async () => ({ contents: [{
   uri: STUDIO_URI,
-  mimeType: "text/html;profile=mcp-app",
+  mimeType: RESOURCE_MIME_TYPE,
   text: await fs.readFile(path.resolve(here, "../assets/newsletter-studio.html"), "utf8"),
   _meta: {
     ui: {
@@ -84,7 +84,7 @@ server.registerTool("discover_event_image", {
   annotations: { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
 }, async (input) => asText(await discoverEventImage(input)));
 
-server.registerTool("open_newsletter_studio", {
+registerAppTool(server, "open_newsletter_studio", {
   title: "Open VOLTA Newsletter Studio",
   description: "Required visual editor for every newsletter request. Render the interactive VOLTA Newsletter Studio after collecting source material so the user can add, edit, remove, preview, save, and export without managing content through chat. Do not substitute opening Markdown or HTML files.",
   inputSchema: { workspacePath: z.string().min(1), month: monthSchema },
