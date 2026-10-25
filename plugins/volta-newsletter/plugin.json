@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "volta-newsletter",
-  "version": "0.4.1+codex.20261019",
+  "version": "0.4.2+codex.20261025",
   "description": "Draft sourced, editable, VOLTA-branded monthly newsletters with calendar links, engagement CTAs, and optional unsent Mailchimp campaigns.",
   "author": {
     "name": "VOLTA Halifax",
